@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Medical Document Analyzer - CloudAct</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="logo">
+                <div class="cloud-icon"></div>
+                CloudAct
+            </div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="main-content">
+            <h1>Medical Document Analyzer</h1>
+            <p class="subtitle">Get back to practicing medicine with the confidence that CloudAct is your trusted AI partner. Don't settle for status quo!</p>
+            
+            <form id="analyze-form" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label>Upload PDF:</label>
+                    <input type="file" id="pdf_file" name="pdf_file" accept="application/pdf" required>
+                </div>
+                <button type="submit">Analyze Document</button>
+            </form>
+
+            <div id="result" class="result" style="display:none;"></div>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">📄</div>
+                <h3>Document Analysis</h3>
+                <p>Extract patient information from medical documents using advanced AI</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🔒</div>
+                <h3>Secure Processing</h3>
+                <p>Your data is processed securely with industry-standard encryption</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h3>Fast Results</h3>
+                <p>Get instant analysis results powered by Google's Gemini AI</p>
+            </div>
+        </div>
+    </div>
+
+<script>
+    document.getElementById('analyze-form').onsubmit = async function(e) {
+        e.preventDefault();
+        const pdfInput = document.getElementById('pdf_file');
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="loading">Analyzing document with CloudAct AI...</div>';
+
+        if (!pdfInput.files.length) {
+            resultDiv.innerHTML = '<div class="error">Please upload a PDF file.</div>';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('pdf_file', pdfInput.files[0]);
+
+        try {
+            const res = await fetch('/analyze_pdf', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success) {
+                resultDiv.innerHTML = '<div class="success"><strong>Analysis Complete!</strong><br><br>' + data.result.replace(/\n/g, '<br>') + '</div>';
+            } else {
+                resultDiv.innerHTML = '<div class="error">Error: ' + data.error + '</div>';
+            }
+        } catch (err) {
+            resultDiv.innerHTML = '<div class="error">Request failed. Please check your connection and try again.</div>';
+        }
+    };
+</script>
+</body>
+</html>

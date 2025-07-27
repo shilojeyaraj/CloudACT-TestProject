@@ -1,0 +1,9 @@
+Flask
+requests
+PyPDF2
+PyCryptodome
+PyMuPDF
+openai
+python-dotenv
+tqdm
+Pillow 
