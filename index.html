@@ -2,86 +2,511 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Document Analyzer - CloudAct</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Animated background elements */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: float 20s linear infinite;
+            z-index: 1;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(-60px, -60px) rotate(360deg); }
+        }
+
+        /* Floating medical icons */
+        .floating-icon {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.1);
+            font-size: 2rem;
+            z-index: 1;
+            animation: floatVertical 6s ease-in-out infinite;
+        }
+
+        .floating-icon:nth-child(1) {
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .floating-icon:nth-child(2) {
+            top: 20%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+
+        .floating-icon:nth-child(3) {
+            bottom: 15%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        .floating-icon:nth-child(4) {
+            bottom: 25%;
+            right: 10%;
+            animation-delay: 1s;
+        }
+
+        @keyframes floatVertical {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Main container */
+        .page-wrapper {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
+            padding: 3rem;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            max-width: 480px;
+            width: 100%;
+            position: relative;
+            z-index: 10;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+        }
+
+        .page-wrapper:hover {
+            transform: translateY(-5px);
+        }
+
+        
+        .title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 1.1rem;
+            text-align: center;
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+        }
+
+        /* Form styles */
+        .form-box {
+            width: 100%;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        /* File input styling */
+        .file-input-wrapper {
+            position: relative;
+            display: block;
+            cursor: pointer;
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .file-input-wrapper:hover {
+            border-color: #667eea;
+            background: #f1f5f9;
+        }
+
+        .file-input-wrapper.drag-over {
+            border-color: #667eea;
+            background: #eff6ff;
+            transform: scale(1.02);
+        }
+
+        #pdf_file {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-input-content {
+            pointer-events: none;
+        }
+
+        .file-icon {
+            font-size: 3rem;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .file-text {
+            color: #475569;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-subtext {
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+
+        .file-selected {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: #059669;
+            font-weight: 500;
+        }
+
+        /* Button styles */
+        #submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        #submit-btn:active {
+            transform: translateY(0);
+        }
+
+        #submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* Spinner animation */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Result styles */
+        .result {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 12px;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result.success {
+            background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .result.error {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            color: #991b1b;
+            border: 1px solid #f87171;
+        }
+
+        .result.loading {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            color: #1e40af;
+            border: 1px solid #60a5fa;
+        }
+
+        .result h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .result p {
+            margin-bottom: 0;
+            line-height: 1.5;
+        }
+
+        /* Responsive design */
+        @media (max-width: 640px) {
+            .page-wrapper {
+                margin: 1rem;
+                padding: 2rem;
+                max-width: none;
+            }
+
+            .title {
+                font-size: 2rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .file-input-wrapper {
+                padding: 1.5rem;
+            }
+        }
+
+        /* Accessibility improvements */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Focus styles for accessibility */
+        #pdf_file:focus + .file-input-wrapper {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+
+        #submit-btn:focus {
+            outline: 2px solid #667eea;
+            outline-offset: 2px;
+        }
+    </style>
 </head>
 <body>
-    <div class="header">
-        <div class="container">
-            <div class="logo">
-                <div class="cloud-icon"></div>
-                CloudAct
-            </div>
-        </div>
-    </div>
+    <!-- Floating background icons -->
     
-    <div class="container">
-        <div class="main-content">
-            <h1>Medical Document Analyzer</h1>
-            <p class="subtitle">Get back to practicing medicine with the confidence that CloudAct is your trusted AI partner. Don't settle for status quo!</p>
-            
-            <form id="analyze-form" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label>Upload PDF:</label>
-                    <input type="file" id="pdf_file" name="pdf_file" accept="application/pdf" required>
-                </div>
-                <button type="submit">Analyze Document</button>
-            </form>
 
-            <div id="result" class="result" style="display:none;"></div>
-        </div>
-        
-        <div class="features">
-            <div class="feature">
-                <div class="feature-icon">📄</div>
-                <h3>Document Analysis</h3>
-                <p>Extract patient information from medical documents using advanced AI</p>
+    <div class="page-wrapper">
+        <h1 class="title">Medical Document Processor</h1>
+        <p class="subtitle">Upload your Ontario Healthcare Provider's medical Conditional Report Form as a PDF file and we'll process it for you.</p>
+        <form id="analyze-form" enctype="multipart/form-data" class="form-box">
+            <div class="form-group">
+                <label for="pdf_file">📄 Upload Medical Document</label>
+                <input 
+                    type="file" 
+                    id="pdf_file" 
+                    name="pdf_file" 
+                    accept="application/pdf" 
+                    required
+                >
+                <div class="file-input-wrapper" id="file-wrapper">
+                    <div class="file-input-content">
+                        <span class="file-icon">📄</span>
+                        <div class="file-text">Click to upload or drag and drop</div>
+                        <div class="file-subtext">PDF files only, max 10MB</div>
+                    </div>
+                    <div class="file-selected" id="file-selected">
+                        <span>✅</span>
+                        <span id="selected-filename"></span>
+                    </div>
+                </div>
             </div>
-            <div class="feature">
-                <div class="feature-icon">🔒</div>
-                <h3>Secure Processing</h3>
-                <p>Your data is processed securely with industry-standard encryption</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">⚡</div>
-                <h3>Fast Results</h3>
-                <p>Get instant analysis results powered by Google's Gemini AI</p>
-            </div>
-        </div>
+
+            <button type="submit" id="submit-btn">
+                <span class="btn-text">Analyze Document</span>
+                <span class="btn-loading" style="display: none;">
+                    <div class="spinner"></div>
+                    Processing...
+                </span>
+            </button>
+        </form>
+
+        <div id="result" class="result" style="display:none;"></div>
     </div>
 
-<script>
-    document.getElementById('analyze-form').onsubmit = async function(e) {
-        e.preventDefault();
-        const pdfInput = document.getElementById('pdf_file');
-        const resultDiv = document.getElementById('result');
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = '<div class="loading">Analyzing document with CloudAct AI...</div>';
+    <script>
+        // File input handling
+        const fileInput = document.getElementById('pdf_file');
+        const fileWrapper = document.getElementById('file-wrapper');
+        const fileSelected = document.getElementById('file-selected');
+        const selectedFilename = document.getElementById('selected-filename');
+        const fileInputContent = fileWrapper.querySelector('.file-input-content');
 
-        if (!pdfInput.files.length) {
-            resultDiv.innerHTML = '<div class="error">Please upload a PDF file.</div>';
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('pdf_file', pdfInput.files[0]);
-
-        try {
-            const res = await fetch('/analyze_pdf', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (data.success) {
-                resultDiv.innerHTML = '<div class="success"><strong>Analysis Complete!</strong><br><br>' + data.result.replace(/\n/g, '<br>') + '</div>';
+        // File selection handler
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                const fileName = e.target.files[0].name;
+                selectedFilename.textContent = fileName;
+                fileInputContent.style.display = 'none';
+                fileSelected.style.display = 'flex';
+                fileWrapper.style.borderColor = '#059669';
+                fileWrapper.style.background = '#ecfdf5';
             } else {
-                resultDiv.innerHTML = '<div class="error">Error: ' + data.error + '</div>';
+                resetFileInput();
             }
-        } catch (err) {
-            resultDiv.innerHTML = '<div class="error">Request failed. Please check your connection and try again.</div>';
+        });
+
+        // Reset file input display
+        function resetFileInput() {
+            fileInputContent.style.display = 'block';
+            fileSelected.style.display = 'none';
+            fileWrapper.style.borderColor = '#cbd5e1';
+            fileWrapper.style.background = '#f8fafc';
         }
-    };
-</script>
+
+        // Drag and drop functionality
+        fileWrapper.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            fileWrapper.classList.add('drag-over');
+        });
+
+        fileWrapper.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            fileWrapper.classList.remove('drag-over');
+        });
+
+        fileWrapper.addEventListener('drop', function(e) {
+            e.preventDefault();
+            fileWrapper.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type === 'application/pdf') {
+                fileInput.files = files;
+                const fileName = files[0].name;
+                selectedFilename.textContent = fileName;
+                fileInputContent.style.display = 'none';
+                fileSelected.style.display = 'flex';
+                fileWrapper.style.borderColor = '#059669';
+                fileWrapper.style.background = '#ecfdf5';
+            }
+        });
+
+        // Form submission
+        document.getElementById('analyze-form').onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const pdfInput = document.getElementById('pdf_file');
+            const resultDiv = document.getElementById('result');
+            const submitBtn = document.getElementById('submit-btn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnLoading = submitBtn.querySelector('.btn-loading');
+
+            // Validate file
+            if (!pdfInput.files.length) {
+                showResult('error', 'Please upload a PDF file.');
+                return;
+            }
+
+            // Check file size (10MB limit)
+            if (pdfInput.files[0].size > 10 * 1024 * 1024) {
+                showResult('error', 'File size must be less than 10MB.');
+                return;
+            }
+            
+            // Loading state
+            submitBtn.disabled = true;
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'flex';
+            showResult('loading', 'Analyzing document with CloudAct AI...');
+            
+            const formData = new FormData();
+            formData.append('pdf_file', pdfInput.files[0]);
+            
+            try {
+                const res = await fetch('/analyze_pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    let msg = `
+                        <h3>✅ Analysis Complete!</h3>
+                        <p>Your document has been processed successfully. Professional insights have been generated and are ready for review.</p>
+                    `;
+                    showResult('success', msg);
+                } else {
+                    showResult('error', `Analysis failed: ${data.error}`);
+                }
+            } catch (err) {
+                console.error('Request failed:', err);
+                showResult('error', 'Connection failed. Please check your network and try again.');
+            } finally {
+                submitBtn.disabled = false;
+                btnText.style.display = 'inline';
+                btnLoading.style.display = 'none';
+            }
+        };
+
+        function showResult(type, message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+    </script>
 </body>
 </html>

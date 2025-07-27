@@ -9,6 +9,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import google.generativeai as genai
 import base64
+import re
+from tabulate import tabulate  # ✅ For nice table output in terminal
 
 # ✅ Load environment variables
 load_dotenv()
@@ -24,7 +26,7 @@ app = Flask(__name__)
 
 # Fields for CSV and JSON
 FIELDS = [
-    "Patient Last Name", "Patient First Name", "Patient Middle Initial", "Patient Date of Birth",
+    "From","Patient Last Name", "Patient First Name", "Patient Middle Initial", "Patient Date of Birth",
     "Patient Gender", "Patient Driver's Licence Number", "Patient Unit Number", "Patient Street Number",
     "Patient Street Name", "Patient PO Box", "Patient City/Town/Village", "Patient Province",
     "Patient Postal Code", "Practitioner Last Name", "Practitioner First Name", "Practitioner Licence Number",
@@ -61,6 +63,7 @@ def pdf_to_image_bytes(pdf_file, dpi=300):
     finally:
         if os.path.exists(temp_pdf_path):
             os.unlink(temp_pdf_path)
+
 # ✅ Analyze image using Gemini Vision API
 def analyze_pdf_image_with_gemini(encoded_image):
     model = genai.GenerativeModel("gemini-1.5-pro") 
@@ -68,7 +71,6 @@ def analyze_pdf_image_with_gemini(encoded_image):
     prompt = f"""
     Extract the following fields from this medical form image and return ONLY valid JSON with these exact keys:
     {", ".join(FIELDS)}
-
     If a value is missing, use "Not specified".
     Return ONLY JSON, no extra text.
     """
@@ -78,6 +80,12 @@ def analyze_pdf_image_with_gemini(encoded_image):
         {"mime_type": "image/jpeg", "data": base64.b64decode(encoded_image)}
     ])
     return response.text
+
+# ✅ Clean Gemini Output
+def clean_gemini_output(output):
+    # Remove markdown code block markers like ```json and ```
+    cleaned = re.sub(r"```[a-zA-Z]*", "", output).replace("```", "").strip()
+    return cleaned
 
 # ✅ Parse fallback text if JSON fails
 def parse_text_response(text_response):
@@ -103,6 +111,7 @@ def append_to_csv(data_dict, filename="extracted_info.csv"):
         if not file_exists:
             writer.writeheader()
         writer.writerow(data_dict)
+        f.flush()  # <-- This line forces data to disk
 
 @app.route("/analyze_pdf", methods=["POST"])
 def analyze_pdf():
@@ -117,20 +126,29 @@ def analyze_pdf():
             return jsonify({"success": False, "error": "Failed to convert PDF to image."})
 
         # ✅ Analyze with Gemini Vision
-        gemini_output = analyze_pdf_image_with_gemini(encoded_image)
-        print("Gemini Vision Output:", gemini_output)
+        gemini_output_raw = analyze_pdf_image_with_gemini(encoded_image)
+        print("\n=== Raw Gemini Output ===")
+        print(gemini_output_raw)
+
+        # ✅ Clean Gemini Output
+        gemini_output = clean_gemini_output(gemini_output_raw)
 
         # ✅ Parse JSON or fallback
         try:
             data = json.loads(gemini_output)
         except json.JSONDecodeError:
-            print("Gemini did not return valid JSON, trying fallback parsing...")
+            print("Gemini did not return valid JSON, using fallback parsing...")
             data = parse_text_response(gemini_output)
 
         # ✅ Fill missing fields
         for field in FIELDS:
             if field not in data:
                 data[field] = "Not specified"
+
+        # ✅ Print nicely to terminal
+        print("\n=== Extracted Information ===")
+        table = [(k, v) for k, v in data.items()]
+        print(tabulate(table, headers=["Field", "Value"], tablefmt="grid"))
 
         # ✅ Save to CSV
         append_to_csv(data)
@@ -149,4 +167,6 @@ def index():
     return send_from_directory(".", "index.html")
 
 if __name__ == "__main__":
+    print("✅ Starting CloudAct Medical Document Analyzer...")
     app.run(debug=True)
+
