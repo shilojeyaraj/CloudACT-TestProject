@@ -10,6 +10,7 @@ from flask import Flask, request, jsonify, render_template_string, send_from_dir
 from PIL import Image
 from dotenv import load_dotenv
 import os
+import google.generativeai as genai
 
 # Load API key from .env file
 load_dotenv()
@@ -87,34 +88,28 @@ def gemini_extract_text(images):
     
     print("Beginning OCR text extraction via Gemini Vision API (first page only)...")
     
+    # Configure Gemini
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-pro-vision")
+    
     # Only process the first image/page
     image = images[0]
     try:
         print(f"Processing first page image...")
-        base64_image = encode_image(image)
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
+        # Convert PIL image to bytes for Gemini
+        import io
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG")
+        image_bytes = buffer.getvalue()
         
-        data = {
-            "contents": [{
-                "parts": [
-                    {"text": "Extract all text from this image."},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": base64_image
-                        }
-                    }
-                ]
-            }]
-        }
+        # Create the prompt
+        prompt = "Extract all text from this image."
         
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        response.raise_for_status()
-        result = response.json()
+        # Generate content with image
+        response = model.generate_content([prompt, image_bytes])
         
-        page_text = result["candidates"][0]["content"]["parts"][0]["text"]
+        page_text = response.text
         extracted_text = f"Page 1:\n{page_text}\n\n"
         print(f"Successfully extracted {len(page_text)} characters from first page")
         
@@ -195,74 +190,56 @@ def analyze_document_with_gemini(api_key, document_text):
         document_text = str(document_text)
     
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
-        headers = {"Content-Type": "application/json"}
+        # Configure Gemini
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-pro")
         
-        prompt = (
-            "You are a medical AI assistant. Extract the following fields from the provided medical document. "
-            "Return each field as 'Field: Value' on its own line. If a field is missing, say 'Not specified'.\n\n"
-            "Fields to extract:\n"
-            "Patient Last Name\n"
-            "Patient First Name\n"
-            "Patient Middle Initial\n"
-            "Patient Date of Birth\n"
-            "Patient Gender\n"
-            "Patient Driver's Licence Number\n"
-            "Patient Unit Number\n"
-            "Patient Street Number\n"
-            "Patient Street Name\n"
-            "Patient PO Box\n"
-            "Patient City/Town/Village\n"
-            "Patient Province\n"
-            "Patient Postal Code\n"
-            "Practitioner Last Name\n"
-            "Practitioner First Name\n"
-            "Practitioner Licence Number\n"
-            "Practitioner Telephone Number\n"
-            "Practitioner Unit Number\n"
-            "Practitioner Street Number\n"
-            "Practitioner Street Name\n"
-            "Practitioner City/Town/Village\n"
-            "Practitioner Province\n"
-            "Practitioner Postal Code\n"
-            "Practitioner Role\n"
-            "Patient is aware of this report\n"
-            "Notify if patient requests copy\n"
-            "Practitioner's Signature\n"
-            "Date of Report Examination\n"
-            "Cognitive Impairment\n"
-            "Cognitive Impairment Due To\n"
-            "Sudden Incapacitation\n"
-            "Sudden Incapacitation Due To\n"
-            "Seizure\n"
-            "Seizure Due To\n"
-            "Syncope\n"
-            "Syncope Due To\n"
-            "CVA resulting in (check all that apply)\n"
-            "CVA Due To\n"
-            "Motor or Sensory Impairment\n"
-            "Motor or Sensory Impairment Due To\n"
-            "Visual Impairment\n"
-            "Visual Impairment Details\n"
-            "Substance Use Disorder\n"
-            "Substance Use Disorder Details\n"
-            "Psychiatric Disorder\n"
-            "Psychiatric Disorder Details\n"
-            "Other (specify)\n"
-            "Discretionary Report of Medical Condition or Impairment\n"
-            "Describe condition(s) or impairment\n"
-            "\nMedical Document:\n" + document_text
-        )
+        prompt = """
+You are a medical document extraction assistant. Extract the following fields from the provided medical document.
+Return each field as 'Field: Value' on its own line. If a field is missing, say 'Not specified'.
+
+IMPORTANT INSTRUCTIONS:
+1. Look for any filled-in information in the document (especially blue text)
+2. Extract any visible text, form fields, or filled information
+3. Pay attention to any text that might be in different colors or formatting
+4. Look for checkboxes that are marked, dates that are filled, or names that are written
+5. Focus only on the fields that are actually present on this form
+
+Fields to extract:
+Patient Last Name
+Patient First Name
+Patient Middle Initial
+Patient Date of Birth
+Patient Gender
+Patient Driver's Licence Number
+Patient Unit Number
+Patient Street Number
+Patient Street Name
+Patient PO Box
+Patient City/Town/Village
+Patient Province
+Patient Postal Code
+Practitioner Last Name
+Practitioner First Name
+Practitioner Licence Number
+Practitioner Telephone Number
+Practitioner Unit Number
+Practitioner Street Number
+Practitioner Street Name
+Practitioner City/Town/Village
+Practitioner Province
+Practitioner Postal Code
+Practitioner Role
+Patient is aware of this report
+Notify if patient requests copy
+Practitioner's Signature
+Date of Report Examination
+
+Medical Document:
+""" + document_text
         
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}]
-        }
-        
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        response.raise_for_status()
-        result = response.json()
-        
-        return result["candidates"][0]["content"]["parts"][0]["text"]
+        response = model.generate_content(prompt)
+        return response.text
         
     except Exception as e:
         if "quota" in str(e).lower() or "429" in str(e):
@@ -279,25 +256,27 @@ def parse_ai_response(ai_text):
         "Practitioner Telephone Number", "Practitioner Unit Number", "Practitioner Street Number",
         "Practitioner Street Name", "Practitioner City/Town/Village", "Practitioner Province",
         "Practitioner Postal Code", "Practitioner Role", "Patient is aware of this report",
-        "Notify if patient requests copy", "Practitioner's Signature", "Date of Report Examination",
-        "Cognitive Impairment", "Cognitive Impairment Due To", "Sudden Incapacitation", "Sudden Incapacitation Due To",
-        "Seizure", "Seizure Due To", "Syncope", "Syncope Due To",
-        "CVA resulting in (check all that apply)", "CVA Due To",
-        "Motor or Sensory Impairment", "Motor or Sensory Impairment Due To",
-        "Visual Impairment", "Visual Impairment Details",
-        "Substance Use Disorder", "Substance Use Disorder Details",
-        "Psychiatric Disorder", "Psychiatric Disorder Details",
-        "Other (specify)", "Discretionary Report of Medical Condition or Impairment",
-        "Describe condition(s) or impairment"
+        "Notify if patient requests copy", "Practitioner's Signature", "Date of Report Examination"
     ]
     result = []
+    
+    # Split the AI response into lines and clean them
+    lines = [line.strip() for line in ai_text.split('\n') if line.strip()]
+    
     for field in fields:
         value = "Not specified"
-        for line in ai_text.splitlines():
+        for line in lines:
+            # Check if line starts with the field name (case insensitive)
             if line.lower().startswith(field.lower()):
-                value = line.split(":", 1)[1].strip()
-                break
+                # Extract the value after the colon
+                if ':' in line:
+                    value = line.split(':', 1)[1].strip()
+                    # Remove any extra formatting
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    break
         result.append(value)
+    
     return result
 
 def append_to_csv(row, filename="extracted_info.csv"):
@@ -313,18 +292,64 @@ def append_to_csv(row, filename="extracted_info.csv"):
                 "Practitioner Telephone Number", "Practitioner Unit Number", "Practitioner Street Number",
                 "Practitioner Street Name", "Practitioner City/Town/Village", "Practitioner Province",
                 "Practitioner Postal Code", "Practitioner Role", "Patient is aware of this report",
-                "Notify if patient requests copy", "Practitioner's Signature", "Date of Report Examination",
-                "Cognitive Impairment", "Cognitive Impairment Due To", "Sudden Incapacitation", "Sudden Incapacitation Due To",
-                "Seizure", "Seizure Due To", "Syncope", "Syncope Due To",
-                "CVA resulting in (check all that apply)", "CVA Due To",
-                "Motor or Sensory Impairment", "Motor or Sensory Impairment Due To",
-                "Visual Impairment", "Visual Impairment Details",
-                "Substance Use Disorder", "Substance Use Disorder Details",
-                "Psychiatric Disorder", "Psychiatric Disorder Details",
-                "Other (specify)", "Discretionary Report of Medical Condition or Impairment",
-                "Describe condition(s) or impairment"
+                "Notify if patient requests copy", "Practitioner's Signature", "Date of Report Examination"
             ])
         writer.writerow(row)
+
+def save_to_json(extracted_text, ai_analysis, filename="extracted_data.json"):
+    """Save extracted text and AI analysis to JSON file"""
+    import json
+    from datetime import datetime
+    
+    data = {
+        "timestamp": datetime.now().isoformat(),
+        "complete_extracted_text": extracted_text,
+        "ai_analysis": ai_analysis,
+        "parsed_fields": {}
+    }
+    
+    # If we have AI analysis, try to parse it into structured data
+    if ai_analysis and not ai_analysis.startswith("Gemini API"):
+        fields = [
+            "Patient Last Name", "Patient First Name", "Patient Middle Initial", "Patient Date of Birth",
+            "Patient Gender", "Patient Driver's Licence Number", "Patient Unit Number", "Patient Street Number",
+            "Patient Street Name", "Patient PO Box", "Patient City/Town/Village", "Patient Province",
+            "Patient Postal Code", "Practitioner Last Name", "Practitioner First Name", "Practitioner Licence Number",
+            "Practitioner Telephone Number", "Practitioner Unit Number", "Practitioner Street Number",
+            "Practitioner Street Name", "Practitioner City/Town/Village", "Practitioner Province",
+            "Practitioner Postal Code", "Practitioner Role", "Patient is aware of this report",
+            "Notify if patient requests copy", "Practitioner's Signature", "Date of Report Examination"
+        ]
+        
+        parsed_row = parse_ai_response(ai_analysis)
+        for i, field in enumerate(fields):
+            data["parsed_fields"][field] = parsed_row[i] if i < len(parsed_row) else "Not specified"
+    
+    # Save to JSON file
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    print(f"Complete extracted text and analysis saved to {filename}")
+    return filename
+
+def save_raw_text_to_json(extracted_text, filename="raw_extracted_text.json"):
+    """Save only the raw extracted text to a separate JSON file"""
+    import json
+    from datetime import datetime
+    
+    data = {
+        "timestamp": datetime.now().isoformat(),
+        "raw_extracted_text": extracted_text,
+        "text_length": len(extracted_text),
+        "extraction_method": "PyPDF2 + Gemini Vision (if needed)"
+    }
+    
+    # Save to JSON file
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    
+    print(f"Raw extracted text saved to {filename}")
+    return filename
 
 @app.route('/analyze_pdf', methods=['POST'])
 def analyze_pdf():
@@ -346,6 +371,11 @@ def analyze_pdf():
         print(f"Text type: {type(text)}, length: {len(text) if text else 0}")
         print(f"Text preview: {text[:200] if text else 'None'}")
         
+        # Always save raw extracted text to JSON
+        print("Saving raw extracted text to JSON...")
+        raw_json_filename = save_raw_text_to_json(text)
+        print(f"Raw text saved to {raw_json_filename}")
+        
         # Check if we have Gemini API available for analysis
         if api_key and not text.startswith("Gemini API quota exceeded"):
             # Analyze the extracted text with Gemini
@@ -365,22 +395,39 @@ def analyze_pdf():
                 append_to_csv(row)
                 print("CSV saved successfully!")
                 
-                return jsonify({'success': True, 'result': result})
+                # Also save to JSON
+                print("Saving to JSON...")
+                json_filename = save_to_json(text, result)
+                print(f"JSON saved to {json_filename}")
+                
+                return jsonify({'success': True, 'result': result, 'json_file': json_filename})
             else:
                 # Gemini analysis failed, return extracted text only
                 print(f"Gemini analysis failed: {result}")
+                # Save extracted text to JSON even if analysis failed
+                print("Saving extracted text to JSON...")
+                json_filename = save_to_json(text, "Analysis failed")
+                print(f"JSON saved to {json_filename}")
+                
                 return jsonify({
                     'success': True, 
                     'result': f"Text extracted successfully but Gemini analysis failed.\n\nExtracted Text:\n{text[:1000]}...",
-                    'warning': 'Gemini analysis failed. Only text extraction completed.'
+                    'warning': 'Gemini analysis failed. Only text extraction completed.',
+                    'json_file': json_filename
                 })
         else:
             # No Gemini API available, return extracted text only
             print("No Gemini API available for analysis")
+            # Save extracted text to JSON
+            print("Saving extracted text to JSON...")
+            json_filename = save_to_json(text, "No API available")
+            print(f"JSON saved to {json_filename}")
+            
             return jsonify({
                 'success': True, 
                 'result': f"Text extracted successfully using PyPDF2.\n\nExtracted Text:\n{text[:1000]}...",
-                'warning': 'No Gemini API available. Only text extraction completed.'
+                'warning': 'No Gemini API available. Only text extraction completed.',
+                'json_file': json_filename
             })
         
     except Exception as e:

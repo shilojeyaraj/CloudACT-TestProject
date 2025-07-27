@@ -18,7 +18,7 @@ else:
 def test_gemini_api():
     # Test a simple Gemini API call
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         data = {
             "contents": [{"parts": [{"text": "Hello, this is a test."}]}]
